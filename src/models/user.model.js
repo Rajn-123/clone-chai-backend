@@ -51,11 +51,17 @@ const userSchema = new Schema({
 },{timestamps: true})
 
 userSchema.pre("save", async function (next) {
-    if(!this.isModified("password")) return next()
+    if (!this.isModified("password")) return ;
 
-    this.password = await bcrypt.hash(this.password, 10)
-    next()
-})
+    try {
+        // You can also use bcrypt.genSalt(10) separately for more control
+        this.password = await bcrypt.hash(this.password, 10);
+        
+    } catch (error) {
+        throw error // Passes the error to the save() promise rejection
+    }
+});
+
 
 userSchema.methods.isPasswordCorrect = async function (password) {
     return await bcrypt.compare(password, this.password)
