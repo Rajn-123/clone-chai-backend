@@ -1,6 +1,6 @@
 // HW Read about Request and Response in details and source to follow go to Express.js HomePage and read.
 const asyncHandler = (requestHandler) => {
-    (req, res, next) => {
+    return (req, res, next) => {
         Promise.resolve(requestHandler(req, res, next)).catch((err) => next(err))
     }
 }
