@@ -3,6 +3,27 @@ import { User } from "../models/user.model.js"
 import { ApiError } from "../utils/ApiError.js"
 import { uploadOnCloudinary } from "../utils/cloudinary.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
+import cookieParser from "cookie-parser"
+
+const generateAccessAndRefreshTokens = async (userId) => {
+    try {
+        const user = await User.findById(userId)
+
+        const accessToken = user.generateAccessToken()
+
+        const refreshToken = user.generateRefreshToken()
+
+        user.refreshToken = refreshToken
+
+        await user.save({validateBeforeSave: false})
+
+        return {accessToken, refreshToken}
+
+    } catch (error) {
+        throw new ApiError(500, "Something went wrong while generating access and refresh token")
+    }
+}
+
 
 const registerUser = asyncHandler( async (req, res) => {
 
@@ -82,5 +103,93 @@ const registerUser = asyncHandler( async (req, res) => {
 
 })
 
-export { registerUser }
+const loginUser = asyncHandler( async (req,res) => {
+    // TODO
+    // 1. Get user data from req.body
+    // 2. Validate the data field that field data is missing or not
+    // 3. Check in db that this filed i.e. email is present in db or not
+    // 4. If no user with this email is exists in db return response that no email found or first register yourself 
+    // 5. If user found with email in db then check for password 
+    // 5.(a) If password is incorrect return response that password is not correct please enter valid password 
+    // 5.(b) If password is correct then generate accessTokeen and refreshToken
+    // 6. Save refreshToken in db
+    // 7. Return res that logIn successfull and send accessTokeen and refreshToken in cookies
+    const {email, username, password } = req.body
+
+    if(!username || !email){
+        throw new ApiError(400, "username or email is required")
+    }
+
+    const user = await User.findOne({
+        $or: [{username}, {email}]
+    })
+
+    if(!user){
+        throw new ApiError(404, "User doesn't exists")
+    }
+    
+    const isPasswordValid = await user.isPasswordCorrect(password)
+
+    if(!isPasswordValid){
+        throw new ApiError(401, "Invalid user credentials")
+    }
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user._id)
+
+    const loggedInUser = await User.findById(user._id).select("-password -refreshToken")
+
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    return res
+        .status(200)
+        .cookie("accessToken", accessToken, options)
+        .cookie("refreshToken", refreshToken, options)
+        .json(
+            new ApiResponse(
+                200, 
+                {
+                user: loggedInUser, 
+                accessToken,
+                refreshToken
+                },
+                "User logged in successfully"
+            )
+        )
+})
+
+const logoutUser = asyncHandler( async (req, res) => {
+    // TODO
+    // 1. Find User in db and clear their refreshToken but how to find user like which basis (email, username, userId) but we can't say user to fill email or username or userId to logOut yourself but there is a catch that is when user press logOut button on frontend we can catch thier accessTokeen or refreshToken and based on that we can extract userId from these token and then we can find user in db.
+
+    await User.findByIdAndUpdate(
+        req.user._id, 
+        {
+        $set: {
+            refreshToken: undefined
+            },
+        },
+        {
+            new: true
+        }
+    )
+
+    const options = {
+        httpOnly: true,
+        secure: true
+    }
+
+    return res
+            .status(200)
+            .clearCookie("accessToken", options)
+            .clearCookie("refreshToken", options)
+            .json(
+                new ApiResponse(200, {}, "User logged out successfully")
+            )
+
+})
+
+export { registerUser, loginUser, logoutUser }
 
